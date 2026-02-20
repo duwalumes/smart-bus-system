@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Global Smart Bus Tracker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <style>
+        #map { height: 70vh; }
+        body { margin: 0; font-family: Arial; }
+        #info { padding: 10px; }
+    </style>
+</head>
+<body>
+
+<h2>Passenger Live Tracker</h2>
+<div id="map"></div>
+<div id="info"></div>
+
+<script>
+    var map = L.map('map').setView([20.5937, 78.9629], 5);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    let passengerLocation = null;
+    let passengerMarker = null;
+    let busMarkers = {};
+    let routeLine = null;
+
+    navigator.geolocation.watchPosition(function(position) {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+
+        passengerLocation = {lat: lat, lng: lng};
+
+        if (!passengerMarker) {
+            passengerMarker = L.marker([lat, lng])
+                .addTo(map)
+                .bindPopup("You (Passenger)")
+                .openPopup();
+        } else {
+            passengerMarker.setLatLng([lat, lng]);
+        }
+
+        map.setView([lat, lng], 14);
+
+    }, function() {
+        alert("Allow location access.");
+    }, { enableHighAccuracy: true });
+
+    function updateBuses() {
+        fetch('/get_buses')
+        .then(res => res.json())
+        .then(data => {
+
+            let infoHTML = "";
+            let nearestBus = null;
+            let nearestDistance = Infinity;
+
+            for (let id in data) {
+                let bus = data[id];
+
+                if (!busMarkers[id]) {
+                    busMarkers[id] = L.marker([bus.lat, bus.lng])
+                        .addTo(map)
+                        .bindPopup("Bus " + id);
+                } else {
+                    busMarkers[id].setLatLng([bus.lat, bus.lng]);
+                }
+
+                if (passengerLocation) {
+                    fetch('/calculate', {
+                        method: 'POST',
+                        headers: {'Content-Type':'application/json'},
+                        body: JSON.stringify({
+                            passenger: passengerLocation,
+                            bus: bus
+                        })
+                    })
+                    .then(res => res.json())
+                    .then(result => {
+
+                        infoHTML += `
+                        <b>Bus ${id}</b><br>
+                        Distance: ${result.distance_km} km<br>
+                        ETA: ${result.eta_minutes} minutes<br><br>
+                        `;
+
+                        document.getElementById("info").innerHTML = infoHTML;
+
+                        if (result.distance_km < nearestDistance) {
+                            nearestDistance = result.distance_km;
+                            nearestBus = bus;
+                        }
+
+                        if (nearestBus) {
+                            if (routeLine) map.removeLayer(routeLine);
+
+                            routeLine = L.polyline([
+                                [passengerLocation.lat, passengerLocation.lng],
+                                [nearestBus.lat, nearestBus.lng]
+                            ], {color:'blue'}).addTo(map);
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    setInterval(updateBuses, 4000);
+</script>
+
+</body>
+</html>
