@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bus Device</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+<h2>Bus ID: {{ bus_id }}</h2>
+<p id="status">Getting location...</p>
+
+<script>
+    const busId = "{{ bus_id }}";
+
+    function sendLocation(position) {
+        const data = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+        };
+
+        fetch(`/update_location/${busId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+        });
+
+        document.getElementById("status").innerHTML =
+            "Sending: " + data.lat + ", " + data.lng;
+    }
+
+    function error() {
+        document.getElementById("status").innerHTML =
+            "Location permission denied.";
+    }
+
+    navigator.geolocation.watchPosition(sendLocation, error, {
+        enableHighAccuracy: true
+    });
+</script>
+
+</body>
+</html>
